@@ -1,0 +1,31 @@
+{
+    'CVPR': 'IEEE/CVF Conference on Computer Vision and Pattern Recognition',
+    'ICCV': 'IEEE International Conference on Computer Vision',
+    'ECCV': 'European Conference on Computer Vision',
+    'NIPS': 'Conference on Neural Information Processing Systems',
+    'ICML': 'International Conference on Machine Learning',
+    'ICLR': 'International Conference on Learning Representations',
+
+    'TIP': 'IEEE Transactions on Image Processing',
+    'TIFS': 'IEEE Transactions on Information Forensics and Security',
+    'PAMI': 'IEEE Transactions on Pattern Analysis and Machine Intelligence',
+
+    'MOBICOM': 'ACM International Conference on Mobile Computing and Networking', 
+    'SIGCOMM': 'ACM International Conference on the applications, technologies, architectures, and protocols for computer communication', 
+    'INFOCOM': 'IEEE International Conference on Computer Communications', 
+    'ICNP': 'IEEE International Conference on Network Protocols', 
+    'SenSys': 'ACM Conference on Embedded Networked Sensor Systems', 
+    'CoNEXT': 'ACM International Conference on emerging Networking EXperiments and Technologies', 
+    'SECON': 'IEEE Communications Society Conference on Sensor and Ad Hoc Communications and Networks', 
+    'IPSN': 'International Conference on Information Processing in Sensor Networks', 
+    'MobiHoc': 'International Symposium on Mobile Ad Hoc Networking and Computing', 
+    'MobiSys': 'International Conference on Mobile Systems, Applications, and Services', 
+    'IWQoS': 'International Workshop on Quality of Service', 
+    'IMC': 'Internet Measurement Conference', 
+    'NOSSDAV': 'Network and Operating System Support for Digital Audio and Video', 
+    'NSDI': 'Symposium on Network System Design and Implementation', 
+    'TON': 'IEEE/ACM Transactions on Networking', 
+    'JSAC': 'IEEE Journal of Selected Areas in Communications', 
+    'TMC': 'IEEE Transactions on Mobile Computing', 
+    'ICPP': 'International Conference on Parallel Processing'
+}
