@@ -1,9 +1,5 @@
 from __future__ import annotations
-
-import os
-import certifi
-import pandas as pd
-import requests
+import os, certifi, pandas as pd, requests
 from lxml import html
 from requests.adapters import HTTPAdapter
 from tqdm.auto import tqdm
@@ -15,32 +11,64 @@ from urllib3.util.retry import Retry
 
 confs = [
     "aaai", # 8.2
-    "ndss", # 4.23 & 8.7
-    "iclr", # 10.2
+    "ndss", # 4.23 & 8.7 0
+    "iclr", # 10.2 0
     "www", # 10.7
     "naacl", # 10.16
-    "sp", # 6.6 & 11.14
-    "cvpr", # 11.15
+    "sp", # 6.6 & 11.14 0
+    "cvpr", # 11.15 0
 
 
     "ijcai", # 1.24
-    "siggraph", # 1.24
+    # "siggraph", # 1.24
     "icml", # 1.31
     "uss", # 8.27 & 2.3
     "acl", # 2.16
     "eccv", # 3.8
-    "iccv", # 3.8
+    "iccv", # 3.8 0
     "mm", # 4.12
     "ccs", # 1.9 & 4.15
     "nips", # 5.16
     "emnlp", # 5.20
-    "siggrapha", # 5.24
+    # "siggrapha", # 5.24
     "ijcv",
     "jmlr",
     "pami",
     "tip",
     "tifs",
     ]
+
+conf_begin_with0 = {"ndss", "iclr", "sp", "cvpr", "iccv"}
+
+confs_full = [
+    "AAAI", # 8.2
+    "NDSS", # 4.23 & 8.7
+    "ICLR", # 10.2
+    "WWW", # 10.7
+    "NAACL", # 10.16
+    "S&P", # 6.6 & 11.14
+    "CVPR", # 11.15
+
+
+    "IJCAI", # 1.24
+    # "SIGGRAPH", # 1.24
+    "ICML", # 1.31
+    "USENIX Security", # 8.27 & 2.3
+    "ACL", # 2.16
+    "ECCV", # 3.8
+    "ICCV", # 3.8
+    "ACM MM", # 4.12
+    "CCS", # 1.9 & 4.15
+    "NeurIPS", # 5.16
+    "EMNLP", # 5.20
+    # "SIGGRAPH Asia", # 5.24
+    "IJCV",
+    "JMLR",
+    "TPAMI",
+    "TIP",
+    "TIFS",
+    ]
+
 years = ["2018","2019","2020","2021","2022","2023","2024","2025"]
 start_year = {
     "pami": 1978,
@@ -57,7 +85,7 @@ OUTFILE = "./all_papers.xlsx"
 
 def fetch_page(url: str) -> bytes:
     """Download HTML with automatic retries and return raw bytes."""
-    print("🔍  Fetching HTML page …")
+    print(f"🔍  Fetching {url} …")
     session = requests.Session()
     retry = Retry(
         total=MAX_RETRIES,
@@ -72,85 +100,118 @@ def fetch_page(url: str) -> bytes:
     resp = session.get(url, timeout=TIMEOUT, verify=certifi.where())
     resp.raise_for_status()
     size_kb = len(resp.content) // 1024
-    print(f"✅  Downloaded {size_kb} KB")
+    print(f"✅  Downloaded {size_kb} KB")
     return resp.content
 
-def parse_titles(page_content: bytes) -> list[str]:
-    """Extract all titles via XPath and show tqdm bar."""
+def parse_titles_authors(page: bytes) -> tuple[list[str],list[str]]:
+    """Return (titles, authors) lists; skip Frontmatter / empty-author items."""
     print("📝  Parsing titles …")
-    #print(page_content)
-    parser = html.HTMLParser(no_network=True, huge_tree=True) 
-    tree = html.fromstring(page_content, parser=parser)
-    title_nodes = tree.xpath('//span[@class="title"]')
 
-    titles: list[str] = []
-    for node in tqdm(title_nodes, desc="Extracting", unit="title", ncols=80):
-        title_text = " ".join(node.itertext()).strip()
-        titles.append(title_text)
+    parser = html.HTMLParser(no_network=True, huge_tree=True)
+    tree   = html.fromstring(page, parser=parser)
 
-    print(f"✅  Parsed {len(titles)} titles")
-    return titles
+    entries = tree.xpath('//li[contains(@class,"entry")]')
+    titles, authors = [], []
 
-def save_excel(titles: list[str], outfile: str, name: str) -> None:
-    print(f"💾 {name} Writing / appending Excel …")
-    new_df = pd.DataFrame({
-        "Conference/Journal": [name] * len(titles),
-        "Title"     : titles,
-    })
+    for li in tqdm(entries, desc="Extracting", unit="pub", ncols=80):
+        # ---- 题名：用 //text() 收集后代所有文本 ----
+        title = " ".join(li.xpath('.//span[@class="title"]//text()')).strip()
+        if not title or title.lower().startswith(("frontmatter", "editorial")):
+            continue
 
-    if os.path.exists(outfile):
-        old_df = pd.read_excel(outfile)
-        combined = pd.concat([old_df, new_df], ignore_index=True)
-    else:
-        combined = new_df
+        # ---- 作者：限定在 <cite>，避免抓到导航里的重复链接 ----
+        names = li.xpath('.//cite//span[@itemprop="author"]'
+                         '//span[@itemprop="name"]/text()')
+        if not names:                 # 无作者条目直接略过
+            continue
 
-    combined.to_excel(outfile, index=False)
-    print(f"✅  Saved {len(new_df)} rows → {outfile}  (total {len(combined)})\n")
+        titles.append(title)
+        authors.append("; ".join(n.strip() for n in names))
+
+    print(f"✅  Parsed {len(titles)} valid items")
+    return titles, authors
+
+
+# ---------------------- Excel writer -----------------------
+def append_sheet(df:pd.DataFrame, year:str)->None:
+    mode = "a" if os.path.exists(OUTFILE) else "w"
+    with pd.ExcelWriter(OUTFILE, engine="openpyxl", mode=mode) as writer:
+        df.to_excel(writer, sheet_name=year, index=False)
+    print(f"💾  {len(df)} rows → sheet [{year}]")
 
 
 def main() -> None:
     if os.path.exists(OUTFILE):
         os.remove(OUTFILE)
     for year in years:
-        for conf in confs:
+        yearly_rows = []
+        for conf,conf_full in zip(confs,confs_full):
             if conf == "iccv" and int(year) % 2 == 0:
                 continue
-            if conf == "eccv" and int(year) % 2 == 1:
-                continue
+            titles, authors = [], []
+
+            # ---------- a) ECCV 分卷 ----------
             if conf == "eccv":
-                titles = []
+                if int(year) % 2 == 1:
+                    continue
                 part = 1
-                name = f"{conf}{year}"
                 while True:
                     URL = f"https://dblp.org/db/conf/{conf}/{conf}{year}-{part}.html"
                     try:
-                        page_content = fetch_page(URL)
+                        page = fetch_page(URL)
                     except:   # ← 关键：404 时正常退出
                         print(f"❌  {URL} does not exist!")
                         break
-                    titles.extend(parse_titles(page_content)[1:])
+                    t,a  = parse_titles_authors(page)
+                    if not t: break
+                    titles.extend(t[1:]); authors.extend(a[1:])
                     part += 1
                 if part == 1:
                     continue
-            else:
-                begin_index = 1
-                if conf == "tifs" or conf == "tip" or conf == "pami" or conf == "ijcv":
-                    URL = f"https://dblp.org/db/journals/{conf}/{conf}{str(int(year)-start_year[conf])}.html"
-                    begin_index = 0
-                elif conf == "nips" and int(year) >= 2020:
-                    URL = f"https://dblp.org/db/conf/{conf}/neurips{year}.html"
-                else:
-                    URL = f"https://dblp.org/db/conf/{conf}/{conf}{year}.html"
-                name = f"{conf}{year}"
 
+            # ---------- b) 期刊卷号 ----------
+            elif conf in {"tifs", "tip", "pami", "ijcv", "jmlr"}:
+                vol  = int(year) - start_year[conf]
+                url  = f"https://dblp.org/db/journals/{conf}/{conf}{vol}.html"
                 try:
-                    page_content = fetch_page(URL)
-                except:   # ← 关键：404 时正常退出
-                    print(f"❌  {URL} does not exist!")
+                    page = fetch_page(url)
+                except Exception:
                     continue
-                titles = parse_titles(page_content)[begin_index:]
-            
-            save_excel(titles, OUTFILE, name)
+                titles, authors = parse_titles_authors(page)
+
+
+            # ---------- c) 常规 + “‑1” 双尝试 ----------
+            else:
+                base = f"https://dblp.org/db/conf/{conf}/{conf}{year}.html"
+                if conf=="nips" and int(year)>=2020:
+                    base = f"https://dblp.org/db/conf/{conf}/neurips{year}.html"
+                
+                try_url = [base]
+                if conf in {"acl","naacl","emnlp"}:
+                    try_url.append(base.replace(f"{year}.html", f"{year}-1.html"))
+                for url in try_url:
+                    try:
+                        page = fetch_page(url)
+                        titles, authors = parse_titles_authors(page)
+                        if not conf in conf_begin_with0:
+                            titles = titles[1:]; authors = authors[1:]
+                        if titles:
+                            break
+                    except Exception:
+                        continue
+
+            if not titles:
+                continue
+
+            yearly_rows.extend({
+                "Conference/Journal": f"{conf_full}{year}",
+                "Title" : t,
+                "Authors": au
+            } for t,au in zip(titles,authors))
+
+        # ==== 写入本年度工作表 ====
+        if yearly_rows:
+            append_sheet(pd.DataFrame(yearly_rows), year)
     
     print("🎉  All done. Enjoy your spreadsheets!")
 
